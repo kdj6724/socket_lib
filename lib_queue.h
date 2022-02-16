@@ -21,4 +21,4 @@ int lib_queue_de(struct QueueType* queue, unsigned char* data);
 void lib_queue_init(struct QueueType* queue);
 void lib_queue_remove(struct QueueType* queue);
 
-#endif	// __G2DM_QUEUE_H__
+#endif	// __LIB_QUEUE_H__
