@@ -2,18 +2,9 @@
 #define __LIB_SERVER_SOCKET_H__
 #include <pthread.h>
 #include <sys/socket.h>
-
-struct NodeType {
-        unsigned char* data;
-        int len;
-        struct NodeType* next;
-};
-
-struct QueueType {
-        pthread_mutex_t mutex;
-        struct NodeType* front;
-        struct NodeType* rear;
-};
+#include <arpa/inet.h>
+#include <netinet/tcp.h>
+#include "lib_queue.h"
 
 struct SocketLibinfo {
 	int port;
@@ -25,6 +16,12 @@ struct SocketLibinfo {
 	pthread_t receiveThread;
 	pthread_mutex_t lock;
 	void (*forwardingFn)(unsigned char* readData, int readLen);
-	struct QueueType* queue;
+	struct QueueType sendQueue;
+	struct QueueType receiveQueue;
 };
+
+int lib_server_socket_init(struct SocketLibinfo* socket);
+int lib_server_socket_run(struct SocketLibinfo* socket);
+void lib_server_socket_stop(struct SocketLibinfo* socket);
+int lib_send_data(struct SocketLibinfo* socket, unsigned char* data, int len);
 #endif	// __LIB_SERVER_SOCKET_H__

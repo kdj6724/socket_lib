@@ -3,7 +3,7 @@
 #include <string.h>
 #include <pthread.h>
 
-#include "queue_lib.h"
+#include "lib_queue.h"
 
 struct NodeType* lib_node_alloc(int len) {
 	struct NodeType* node;
