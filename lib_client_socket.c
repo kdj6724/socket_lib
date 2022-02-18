@@ -42,11 +42,11 @@ static void* lib_send_thread(void *data) {
 	while(sendThreadRun_) {
 		memset(buffer, 0, LIB_QUEUE_MAX_DATA_LENGTH);
 		readLen = lib_dequeue(&socket->sendQueue, buffer);
-		if (readLen >= 0) {
+		if (readLen <= 0) {
 			usleep(500000);
 		} else {
 			pthread_mutex_lock(&socket->lock);
-			write(socket->clientSocketFd, buffer, readLen);
+			write(socket->socketFd, buffer, readLen);
 			pthread_mutex_unlock(&socket->lock);
 		}
 	}
@@ -63,33 +63,31 @@ static void* lib_receive_thread(void *data) {
 	int res = -1;
 	int i = 0;
 
-	socket->clientSocketFd = create_tcp_socket(socket->ipAddr, socket->port, 5);
-
 	epollFd = epoll_create(100);
 	if (epollFd < 0) {
 		perror("[socket-lib] epoll_create error ");
 		return NULL;
 	}
 	ev.events = EPOLLIN;
-	ev.data.fd = socket->clientSocketFd;
-	if (epoll_ctl(epollFd, EPOLL_CTL_ADD, socket->clientSocketFd, &ev)) {
+	ev.data.fd = socket->socketFd;
+	if (epoll_ctl(epollFd, EPOLL_CTL_ADD, socket->socketFd, &ev)) {
 		perror("[socket-lib] epoll_ctl error");
 		goto out;
 	}
 
 	while(receiveThreadRun_) {
-		res = epoll_wait(epollFd, events, LIB_EPOLL_SIZE, -1);
+		res = epoll_wait(epollFd, events, LIB_EPOLL_SIZE, 1000);
 		if (res < 0) {
 			perror("[socket-lib] epoll_wait error");
 			goto out;
 		}
 		for (i=0; i<res; i++) {
-			if (events[i].data.fd == socket->clientSocketFd) {
+			if (events[i].data.fd == socket->socketFd) {
 				int addrSize;
 				addrSize = sizeof(socket->clientAddr);
 				ev.events = EPOLLIN;
-				ev.data.fd = socket->clientSocketFd;
-				if (epoll_ctl(epollFd, EPOLL_CTL_ADD, socket->clientSocketFd, &ev)) {
+				ev.data.fd = socket->socketFd;
+				if (epoll_ctl(epollFd, EPOLL_CTL_ADD, socket->socketFd, &ev)) {
 					perror("[socket-lib] client epoll_ctl error");
 					goto out;
 				}
@@ -101,7 +99,6 @@ static void* lib_receive_thread(void *data) {
 				readByte = recv(events[i].data.fd, buffer,
 						LIB_QUEUE_MAX_DATA_LENGTH, 0);
 				lib_enqueue(&socket->receiveQueue, buffer, readByte);
-				printf("0x%x %d\n", buffer[0], readByte);
 				if (readByte <= 0) {
 					epoll_ctl(epollFd, EPOLL_CTL_DEL, events[i].data.fd, events);
 					close(events[i].data.fd);
@@ -136,7 +133,7 @@ int lib_send_data(struct SocketLibinfo* socket, unsigned char* data, int len) {
 		else 
 			sendLen = leftLen;
 		leftLen = leftLen - sendLen;
-		lib_enqueue(&socket->sendQueue, data, leftLen);
+		lib_enqueue(&socket->sendQueue, data, sendLen);
 		data = data + sendLen;
 	}
 
@@ -148,7 +145,7 @@ int lib_client_socket_init(struct SocketLibinfo* socket) {
 	lib_queue_init(&socket->sendQueue);
 	lib_queue_init(&socket->receiveQueue);
 	pthread_mutex_init(&socket->lock, NULL);
-	socket->clientSocketFd = create_tcp_socket(INADDR_ANY, socket->port, 5);
+	socket->socketFd = create_tcp_socket(INADDR_ANY, socket->port, 5);
 
 	return 0;
 }
@@ -187,7 +184,7 @@ void lib_client_socket_stop(struct SocketLibinfo* socket) {
 	receiveThreadRun_ = 0;
 	pthread_join(socket->receiveThread, (void**)&status);
 
-	close(socket->clientSocketFd);
+	close(socket->socketFd);
 	lib_queue_remove(&socket->sendQueue);
 	lib_queue_remove(&socket->receiveQueue);
 }

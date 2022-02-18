@@ -2,7 +2,18 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "lib_server_socket.h"
+#include "lib_client_socket.h"
+
+static void hex_dump(unsigned char* buf, int len) {
+        int i;
+
+        for(i = 0; i < len; i++) {
+                        if(i != 0 && (i%16) == 0)
+                                        printf("\n%02x ", buf[i]);
+                        else
+                                        printf("%02x ", buf[i]);
+        }
+}
 
 static void test_receive(unsigned char* readData, int readLen) {
 	printf("RX: %s\n", readData);
@@ -10,6 +21,7 @@ static void test_receive(unsigned char* readData, int readLen) {
 
 int main(int argc, char* argv[])
 {
+	char key = -1;	
 	struct SocketLibinfo socket;
 	int res = -1;
 	char str[128];
@@ -17,7 +29,7 @@ int main(int argc, char* argv[])
 	int opt;
 
 	socket.port = 7070;
-	socket.ipAddr = INADDR_ANY;
+	socket.ipAddr = inet_addr("127.0.0.1");
 	while((opt = getopt(argc, argv, "a:p:")) != -1) {
 		switch(opt) {
 			case 'a':
@@ -31,9 +43,9 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	lib_server_socket_init(&socket);
+	lib_client_socket_init(&socket);
 	socket.forwardingFn = test_receive;
-	res = lib_server_socket_run(&socket);
+	res = lib_client_socket_run(&socket);
 	if (res < 0)
 		printf("lib_server_socket_run error\n");
 
@@ -45,8 +57,7 @@ int main(int argc, char* argv[])
 		if (str[0] == 'q' && strlen(str) == 2)
 			break;
 	}
-
-	lib_server_socket_stop(&socket);
+	lib_client_socket_stop(&socket);
 
 	return 0;
 }

@@ -7,9 +7,10 @@
 #include "lib_queue.h"
 
 struct SocketLibinfo {
+	int ipAddr;
 	int port;
-	int serverSocketFd;
-	int clientSocketFd;
+	int socketFd;
+	int connectedFd;
 	struct sockaddr_in serverAddr;
 	struct sockaddr_in clientAddr;
 	pthread_t sendThread;

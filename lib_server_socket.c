@@ -45,13 +45,15 @@ static void* lib_send_thread(void *data) {
 	unsigned char buffer[LIB_QUEUE_MAX_DATA_LENGTH];
 
 	while(sendThreadRun_) {
+		if (sendThreadRun_ == 0)
+			pthread_exit(NULL);
 		memset(buffer, 0, LIB_QUEUE_MAX_DATA_LENGTH);
 		readLen = lib_dequeue(&socket->sendQueue, buffer);
 		if (readLen >= 0) {
 			usleep(500000);
 		} else {
 			pthread_mutex_lock(&socket->lock);
-			write(socket->clientSocketFd, buffer, readLen);
+			write(socket->connectedFd, buffer, readLen);
 			pthread_mutex_unlock(&socket->lock);
 		}
 	}
@@ -68,7 +70,7 @@ static void* lib_receive_thread(void *data) {
 	int res = -1;
 	int i = 0;
 
-	socket->serverSocketFd = create_tcp_socket(INADDR_ANY, socket->port, 5);
+	socket->socketFd = create_tcp_socket(socket->ipAddr, socket->port, 5);
 
 	epollFd = epoll_create(100);
 	if (epollFd < 0) {
@@ -76,28 +78,30 @@ static void* lib_receive_thread(void *data) {
 		return NULL;
 	}
 	ev.events = EPOLLIN;
-	ev.data.fd = socket->serverSocketFd;
-	if (epoll_ctl(epollFd, EPOLL_CTL_ADD, socket->serverSocketFd, &ev)) {
+	ev.data.fd = socket->socketFd;
+	if (epoll_ctl(epollFd, EPOLL_CTL_ADD, socket->socketFd, &ev)) {
 		perror("[socket-lib] epoll_ctl error");
 		goto out;
 	}
 
 	while(receiveThreadRun_) {
-		res = epoll_wait(epollFd, events, LIB_EPOLL_SIZE, -1);
+			if (receiveThreadRun_ == 0)
+				pthread_exit(NULL);
+		res = epoll_wait(epollFd, events, LIB_EPOLL_SIZE, 1000);
 		if (res < 0) {
 			perror("[socket-lib] epoll_wait error");
 			goto out;
 		}
 		for (i=0; i<res; i++) {
-			if (events[i].data.fd == socket->serverSocketFd) {
+			if (events[i].data.fd == socket->socketFd) {
 				int addrSize;
 				addrSize = sizeof(socket->clientAddr);
-				socket->clientSocketFd = accept(socket->serverSocketFd,
+				socket->connectedFd = accept(socket->socketFd,
 						(struct sockaddr*)&socket->clientAddr,	
 						(socklen_t*)&addrSize);
 				ev.events = EPOLLIN;
-				ev.data.fd = socket->clientSocketFd;
-				if (epoll_ctl(epollFd, EPOLL_CTL_ADD, socket->clientSocketFd, &ev)) {
+				ev.data.fd = socket->connectedFd;
+				if (epoll_ctl(epollFd, EPOLL_CTL_ADD, socket->connectedFd, &ev)) {
 					perror("[socket-lib] client epoll_ctl error");
 					goto out;
 				}
@@ -144,7 +148,7 @@ int lib_send_data(struct SocketLibinfo* socket, unsigned char* data, int len) {
 		else 
 			sendLen = leftLen;
 		leftLen = leftLen - sendLen;
-		lib_enqueue(&socket->sendQueue, data, leftLen);
+		lib_enqueue(&socket->sendQueue, data, sendLen);
 		data = data + sendLen;
 	}
 
@@ -194,9 +198,9 @@ void lib_server_socket_stop(struct SocketLibinfo* socket) {
 	receiveThreadRun_ = 0;
 	pthread_join(socket->receiveThread, (void**)&status);
 
-	close(socket->serverSocketFd);
-	close(socket->clientSocketFd);
 	lib_queue_remove(&socket->sendQueue);
 	lib_queue_remove(&socket->receiveQueue);
+	close(socket->connectedFd);
+	close(socket->socketFd);
 }
 
