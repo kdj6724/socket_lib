@@ -38,28 +38,28 @@ static int create_udp_socket(int host, int port, int backlog) {
 	return 0;
 }
 
-int sendThreadRun_ = 1;
 static void* lib_send_thread(void *data) {
 	int readLen = 0;
 	struct SocketLibinfo* socket = (struct SocketLibinfo*)data;
 	unsigned char buffer[LIB_QUEUE_MAX_DATA_LENGTH];
 
-	while(sendThreadRun_) {
-		if (sendThreadRun_ == 0)
-			pthread_exit(NULL);
+	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS,NULL);
+
+	while(1) {
 		memset(buffer, 0, LIB_QUEUE_MAX_DATA_LENGTH);
 		readLen = lib_dequeue(&socket->sendQueue, buffer);
-		if (readLen >= 0) {
+		if (readLen <= 0) {
 			usleep(500000);
 		} else {
 			pthread_mutex_lock(&socket->lock);
+			printf("[kdj6724] %s(%d) %d %c\n", __func__, __LINE__, readLen, buffer[0]);
 			write(socket->connectedFd, buffer, readLen);
 			pthread_mutex_unlock(&socket->lock);
 		}
 	}
 }
 
-int receiveThreadRun_ = 1;
 #define LIB_EPOLL_SIZE 20
 static void* lib_receive_thread(void *data) {
 	struct SocketLibinfo* socket = (struct SocketLibinfo*)data;
@@ -84,9 +84,10 @@ static void* lib_receive_thread(void *data) {
 		goto out;
 	}
 
-	while(receiveThreadRun_) {
-			if (receiveThreadRun_ == 0)
-				pthread_exit(NULL);
+	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS,NULL);
+
+	while(1) {
 		res = epoll_wait(epollFd, events, LIB_EPOLL_SIZE, 1000);
 		if (res < 0) {
 			perror("[socket-lib] epoll_wait error");
@@ -113,7 +114,6 @@ static void* lib_receive_thread(void *data) {
 				readByte = recv(events[i].data.fd, buffer,
 						LIB_QUEUE_MAX_DATA_LENGTH, 0);
 				lib_enqueue(&socket->receiveQueue, buffer, readByte);
-				printf("0x%x %d\n", buffer[0], readByte);
 				if (readByte <= 0) {
 					epoll_ctl(epollFd, EPOLL_CTL_DEL, events[i].data.fd, events);
 					close(events[i].data.fd);
@@ -167,24 +167,28 @@ int lib_server_socket_init(struct SocketLibinfo* socket) {
 int lib_server_socket_run(struct SocketLibinfo* socket) {
 	int res = -1;
 	int status;
+	pthread_attr_t attr;
 
-	sendThreadRun_ = 1;
-	res = pthread_create(&socket->sendThread, NULL, lib_send_thread, (void*)socket);
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	res = pthread_create(&socket->sendThread, &attr, lib_send_thread, (void*)socket);
 	if (res < 0) {
 		perror("[socket-lib] socket send thread error");
 		return -1;
 	}
 
-	receiveThreadRun_ = 1;
-	res = pthread_create(&socket->receiveThread, NULL, lib_receive_thread, (void*)socket);
+	res = pthread_create(&socket->receiveThread, &attr, lib_receive_thread, (void*)socket);
 	if (res < 0) {
 		perror("[socket-lib] socket receive thread error");
 		goto receive_err;
 	}
+	pthread_attr_destroy(&attr);
 
 	return 0;
 
 receive_err:
+	pthread_attr_destroy(&attr);
+	pthread_cancel(socket->sendThread);
 	pthread_join(socket->sendThread, (void**)&status);
 
 	return res;
@@ -193,9 +197,9 @@ receive_err:
 void lib_server_socket_stop(struct SocketLibinfo* socket) {
 	int status;
 
-	sendThreadRun_ = 0;
+	pthread_cancel(socket->sendThread);
 	pthread_join(socket->sendThread, (void**)&status);
-	receiveThreadRun_ = 0;
+	pthread_cancel(socket->receiveThread);
 	pthread_join(socket->receiveThread, (void**)&status);
 
 	lib_queue_remove(&socket->sendQueue);
