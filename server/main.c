@@ -13,10 +13,10 @@ int main(int argc, char* argv[])
 	struct SocketLibinfo socket;
 	int res = -1;
 	char str[128];
-
 	int opt;
+	int port = 7070;
+	int ip = INADDR_ANY;
 
-	socket.port = 7070;
 	socket.ipAddr = INADDR_ANY;
 	while((opt = getopt(argc, argv, "a:p:")) != -1) {
 		switch(opt) {
@@ -31,7 +31,7 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	lib_server_socket_init(&socket);
+	lib_server_socket_init(&socket, ip, port);
 	socket.forwardingFn = test_receive;
 	res = lib_server_socket_run(&socket);
 	if (res < 0)

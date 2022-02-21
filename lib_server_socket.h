@@ -11,8 +11,7 @@ struct SocketLibinfo {
 	int port;
 	int socketFd;
 	int connectedFd;
-	struct sockaddr_in serverAddr;
-	struct sockaddr_in clientAddr;
+	struct sockaddr_in addr;
 	pthread_t sendThread;
 	pthread_t receiveThread;
 	pthread_mutex_t lock;
@@ -21,7 +20,7 @@ struct SocketLibinfo {
 	struct QueueType receiveQueue;
 };
 
-int lib_server_socket_init(struct SocketLibinfo* socket);
+int lib_server_socket_init(struct SocketLibinfo* socket, int ip, int port);
 int lib_server_socket_run(struct SocketLibinfo* socket);
 void lib_server_socket_stop(struct SocketLibinfo* socket);
 int lib_send_data(struct SocketLibinfo* socket, unsigned char* data, int len);

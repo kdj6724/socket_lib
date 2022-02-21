@@ -25,11 +25,10 @@ int main(int argc, char* argv[])
 	struct SocketLibinfo socket;
 	int res = -1;
 	char str[128];
-
+	int port = 7070;
+	int ip = inet_addr("127.0.0.1");
 	int opt;
 
-	socket.port = 7070;
-	socket.ipAddr = inet_addr("127.0.0.1");
 	while((opt = getopt(argc, argv, "a:p:")) != -1) {
 		switch(opt) {
 			case 'a':
@@ -43,7 +42,7 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	lib_client_socket_init(&socket);
+	lib_client_socket_init(&socket, ip, port);
 	socket.forwardingFn = test_receive;
 	res = lib_client_socket_run(&socket);
 	if (res < 0)
