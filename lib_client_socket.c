@@ -16,10 +16,6 @@ static int create_tcp_socket(struct SocketLibinfo* info, int backlog) {
 		perror("[socket-lib] socket error");
 		return -1;
 	}
-	if (connect(sd, (struct sockaddr*)&info->addr, sizeof(struct sockaddr_in)) < 0) {
-		perror("[socket-lib] socket connect error");
-		return -1;
-	}
 
 	return sd;
 }
@@ -70,6 +66,21 @@ static void* lib_receive_thread(void *data) {
 		perror("[socket-lib] epoll_ctl error");
 		goto out;
 	}
+	if (connect(info->socketFd, (struct sockaddr*)&info->addr, 
+			sizeof(struct sockaddr_in)) < 0) {
+		perror("[socket-lib] socket connect error");
+		goto out;
+	}
+	res = epoll_wait(epollFd, events, LIB_EPOLL_SIZE, 1000);
+	if (res < 0) {
+		perror("[socket-lib] epoll_wait error");
+		goto out;
+	}
+	for (i = 0; i < res; i++) {
+		if (events[i].events & EPOLLIN) {
+			printf("[socket-lib] %d socket connected\n", events[i].data.fd);
+		}
+	}
 
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS,NULL);
@@ -81,16 +92,7 @@ static void* lib_receive_thread(void *data) {
 			goto out;
 		}
 		for (i=0; i<res; i++) {
-			if (events[i].data.fd == info->socketFd) {
-				int addrSize;
-				addrSize = sizeof(info->addr);
-				ev.events = EPOLLIN;
-				ev.data.fd = info->socketFd;
-				if (epoll_ctl(epollFd, EPOLL_CTL_ADD, info->socketFd, &ev)) {
-					perror("[socket-lib] client epoll_ctl error");
-					goto out;
-				}
-			} else if (events[i].events & EPOLLIN) {
+			if (events[i].events & EPOLLIN) {
 				int readByte = 0;
 				if (events[i].data.fd < 0)
 					continue;
@@ -99,7 +101,8 @@ static void* lib_receive_thread(void *data) {
 						LIB_QUEUE_MAX_DATA_LENGTH, 0);
 				lib_enqueue(&info->receiveQueue, buffer, readByte);
 				if (readByte <= 0) {
-					epoll_ctl(epollFd, EPOLL_CTL_DEL, events[i].data.fd, events);
+					epoll_ctl(epollFd, EPOLL_CTL_DEL, events[i].data.fd, 
+							events);
 					close(events[i].data.fd);
 					events[i].data.fd = -1;
 					printf("[socket-lib] client disconnected %d \n", readByte);

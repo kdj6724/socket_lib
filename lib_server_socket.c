@@ -48,7 +48,6 @@ static void* lib_send_thread(void *data) {
 			usleep(500000);
 		} else {
 			pthread_mutex_lock(&info->lock);
-			printf("[kdj6724] %s(%d) %d %c\n", __func__, __LINE__, readLen, buffer[0]);
 			write(info->connectedFd, buffer, readLen);
 			pthread_mutex_unlock(&info->lock);
 		}
