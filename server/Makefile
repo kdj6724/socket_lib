@@ -2,7 +2,7 @@
 
 SERVER_LIB = serversock
 SERVER_LIB_PATH = ../
-TARGET = sockettest
+TARGET = server
 CC = gcc
 CFLAGS = -g 
 CFLAGS += -fPIC

@@ -2,7 +2,7 @@
 
 CLIENT_LIB = clientsock
 CLIENT_LIB_PATH = ../
-TARGET = sockettest
+TARGET = client
 CC = gcc
 CFLAGS = -g 
 CFLAGS += -fPIC
